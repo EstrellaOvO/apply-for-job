@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { ensureDatabase } from '@/db/setup';
+import type { EducationRecord, InternshipRecord, LanguageRecord, ProjectRecord } from '@/lib/profile-records';
 
 const now = () => new Date().toISOString();
 
@@ -28,12 +29,16 @@ export async function GET() {
   await ensureDatabase();
   await seedDemoData();
 
-  const [profile, jobs, applications, memories, resumes] = await Promise.all([
+  const [profile, jobs, applications, memories, resumes, education, languages, internships, projects] = await Promise.all([
     env.DB.prepare('SELECT * FROM profiles WHERE id = ?').bind('me').first(),
     env.DB.prepare('SELECT * FROM jobs ORDER BY match_score DESC, discovered_at DESC').all(),
     env.DB.prepare('SELECT * FROM applications ORDER BY COALESCE(applied_at, last_checked_at) DESC').all(),
     env.DB.prepare('SELECT * FROM answer_memory ORDER BY updated_at DESC').all(),
     env.DB.prepare('SELECT id, filename, size, is_current, created_at FROM resumes ORDER BY created_at DESC').all(),
+    env.DB.prepare('SELECT * FROM education_experiences ORDER BY sort_order, updated_at').all(),
+    env.DB.prepare('SELECT * FROM language_skills ORDER BY sort_order, updated_at').all(),
+    env.DB.prepare('SELECT * FROM internship_experiences ORDER BY sort_order, updated_at').all(),
+    env.DB.prepare('SELECT * FROM project_experiences ORDER BY sort_order, updated_at').all(),
   ]);
 
   return Response.json({
@@ -42,6 +47,10 @@ export async function GET() {
     applications: applications.results,
     memories: memories.results,
     resumes: resumes.results,
+    education: education.results,
+    languages: languages.results,
+    internships: internships.results,
+    projects: projects.results,
   });
 }
 
@@ -66,6 +75,47 @@ export async function POST(request: Request) {
         profile.current_location ?? '', profile.years_experience ?? '', profile.target_roles ?? '',
         profile.preferred_locations ?? '', profile.expected_salary ?? '', profile.notice_period ?? '', now(),
       ).run();
+    return Response.json({ ok: true });
+  }
+
+  if (type === 'save-profile-details') {
+    const education = ((body.education ?? []) as EducationRecord[]).slice(0, 20);
+    const languages = ((body.languages ?? []) as LanguageRecord[]).slice(0, 20);
+    const internships = ((body.internships ?? []) as InternshipRecord[]).slice(0, 30);
+    const projects = ((body.projects ?? []) as ProjectRecord[]).slice(0, 30);
+    const updatedAt = now();
+    const statements = [
+      env.DB.prepare('DELETE FROM education_experiences'),
+      env.DB.prepare('DELETE FROM language_skills'),
+      env.DB.prepare('DELETE FROM internship_experiences'),
+      env.DB.prepare('DELETE FROM project_experiences'),
+      ...education.map((item, index) => env.DB.prepare(`INSERT INTO education_experiences (
+        id, school_name, college_name, major_name, degree, start_date, end_date, ranking,
+        full_time, laboratory_level, laboratory_name, advisor, research_direction, sort_order, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        item.id || crypto.randomUUID(), item.school_name ?? '', item.college_name ?? '', item.major_name ?? '',
+        item.degree ?? '', item.start_date ?? '', item.end_date ?? '', item.ranking ?? '', item.full_time ? 1 : 0,
+        item.laboratory_level ?? '', item.laboratory_name ?? '', item.advisor ?? '', item.research_direction ?? '', index, updatedAt,
+      )),
+      ...languages.map((item, index) => env.DB.prepare(`INSERT INTO language_skills (
+        id, language_type, proficiency, exam_name, score, sort_order, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
+        item.id || crypto.randomUUID(), item.language_type ?? '', item.proficiency ?? '', item.exam_name ?? '', item.score ?? '', index, updatedAt,
+      )),
+      ...internships.map((item, index) => env.DB.prepare(`INSERT INTO internship_experiences (
+        id, company_name, department_name, position, start_date, end_date, is_current, description, sort_order, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        item.id || crypto.randomUUID(), item.company_name ?? '', item.department_name ?? '', item.position ?? '',
+        item.start_date ?? '', item.end_date ?? '', item.is_current ? 1 : 0, item.description ?? '', index, updatedAt,
+      )),
+      ...projects.map((item, index) => env.DB.prepare(`INSERT INTO project_experiences (
+        id, project_name, role, start_date, end_date, is_current, description, sort_order, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        item.id || crypto.randomUUID(), item.project_name ?? '', 'Agent开发', item.start_date ?? '',
+        item.end_date ?? '', item.is_current ? 1 : 0, item.description ?? '', index, updatedAt,
+      )),
+    ];
+    await env.DB.batch(statements);
     return Response.json({ ok: true });
   }
 
