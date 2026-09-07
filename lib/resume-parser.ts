@@ -7,10 +7,13 @@ export type ParsedProfile = {
 
 export async function extractPdfText(file: File) {
   const pdfjs = await import('pdfjs-dist');
+  // The worker is served from public/ instead of being resolved relative to
+  // import.meta.url. Vinext's server bundle uses file:// module URLs, which can
+  // otherwise leak into the browser and make PDF.js fail to load its worker.
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-  ).toString();
+    '/pdf.worker.min.mjs',
+    window.location.origin,
+  ).href;
   const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
   const pages: string[] = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
