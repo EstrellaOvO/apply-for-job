@@ -66,7 +66,7 @@ const renderScan = (scan) => {
   elements.fieldList.innerHTML = scan.fields.map((field) => `
     <div class="field-row ${field.value ? 'matched' : ''}">
       <span class="field-dot"></span>
-      <div class="field-copy"><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(field.source)}${field.value ? ` · ${escapeHtml(field.value)}` : ''}</span></div>
+      <div class="field-copy"><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(field.source)}${field.value ? ` · ${escapeHtml(field.value)}` : field.currentValue ? ` · 页面值：${escapeHtml(field.currentValue)}` : ''}</span></div>
       <span class="confidence">${field.confidence ? `${field.confidence}%` : '待确认'}</span>
     </div>
   `).join('');
@@ -76,7 +76,7 @@ const renderScan = (scan) => {
   elements.unknownList.innerHTML = unknown.map((field) => `
     <div class="unknown-item">
       <label for="answer-${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
-      <div class="answer-row"><input id="answer-${escapeHtml(field.id)}" data-field-id="${escapeHtml(field.id)}" placeholder="输入以后使用的答案" /><button type="button" data-save-id="${escapeHtml(field.id)}">记住</button></div>
+      <div class="answer-row"><input id="answer-${escapeHtml(field.id)}" data-field-id="${escapeHtml(field.id)}" value="${escapeHtml(field.currentValue || '')}" placeholder="输入以后使用的答案" /><button type="button" data-save-id="${escapeHtml(field.id)}">记住</button></div>
     </div>
   `).join('');
 
