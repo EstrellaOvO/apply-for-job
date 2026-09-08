@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { extractPdfText, parseProfile } from '@/lib/resume-parser';
+import { FormAssistantView } from '@/components/form-assistant-view';
 import {
   ProfileView as ExpandedProfileView,
   type BasicProfile,
@@ -52,7 +53,7 @@ import type {
   ProjectRecord,
 } from '@/lib/profile-records';
 
-type View = 'dashboard' | 'jobs' | 'applications' | 'profile';
+type View = 'dashboard' | 'jobs' | 'applications' | 'autofill' | 'profile';
 type Modal = 'resume' | 'search' | 'answer' | 'application' | null;
 
 type Profile = BasicProfile;
@@ -170,6 +171,7 @@ const navItems = [
   { id: 'dashboard' as const, label: '工作台', icon: LayoutDashboard },
   { id: 'jobs' as const, label: '岗位发现', icon: Search },
   { id: 'applications' as const, label: '投递记录', icon: FileText },
+  { id: 'autofill' as const, label: '表单助手', icon: Sparkles },
   { id: 'profile' as const, label: '我的资料', icon: CircleUserRound },
 ];
 
@@ -314,6 +316,30 @@ export function JobAssistant() {
     }
   };
 
+  const rememberField = async (
+    fieldKey: string,
+    label: string,
+    value: string,
+  ) => {
+    setBusy(true);
+    try {
+      await callApi({
+        type: 'remember-answer',
+        fieldKey,
+        label,
+        value,
+        scope: 'global',
+      });
+      setNotice(`已记住“${label}”，以后遇到相同字段会自动匹配。`);
+      await refresh(true);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '保存失败');
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const uploadResume = async () => {
     if (!uploadFile) return;
     setBusy(true);
@@ -423,12 +449,14 @@ export function JobAssistant() {
     dashboard: '上午好，今天继续向前一步',
     jobs: '找到真正适合你的机会',
     applications: '每一次投递都有迹可循',
+    autofill: '先检查，再放心填写',
     profile: '建立你的自动填写资料库',
   }[view];
   const subtitle = {
     dashboard: '把岗位发现、投递与跟进集中在一个地方',
     jobs: '根据方向、地点和简历经历筛选岗位',
     applications: '集中查看当前状态、下一步与检查时间',
+    autofill: '识别招聘表单字段，并从可信资料中匹配答案',
     profile: '简历信息与补充答案会在后续申请中复用',
   }[view];
 
@@ -567,6 +595,17 @@ export function JobAssistant() {
               busy={busy}
               onAdd={() => setModal('application')}
               onStatus={updateStatus}
+            />
+          )}
+          {view === 'autofill' && (
+            <FormAssistantView
+              profile={profile}
+              education={data.education}
+              internships={data.internships}
+              projects={data.projects}
+              memories={data.memories}
+              busy={busy}
+              onRemember={rememberField}
             />
           )}
           {view === 'profile' && (
