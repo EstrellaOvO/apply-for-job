@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "职途助手 · 智能表单填写",
+  "version": "0.1.0",
+  "description": "从职途助手同步可信资料，识别招聘申请表字段并在确认后自动填写。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "https://job-application-companion.alight-hare-2905.chatgpt.site/*"
+  ],
+  "action": {
+    "default_title": "职途助手",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://job-application-companion.alight-hare-2905.chatgpt.site/*"
+      ],
+      "js": ["site-sync.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

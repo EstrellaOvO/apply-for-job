@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>职途助手</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header class="brand">
+        <div class="brand-mark">职</div>
+        <div><h1>职途助手</h1><p>检查后再自动填写</p></div>
+        <span class="version">MVP</span>
+      </header>
+
+      <section class="sync-card" id="syncCard">
+        <div><strong id="syncTitle">正在检查资料…</strong><p id="syncDetail">请稍候</p></div>
+        <button class="link-button" id="syncButton" type="button">同步</button>
+      </section>
+
+      <section class="actions">
+        <button class="primary" id="scanButton" type="button">扫描当前页面</button>
+        <button class="secondary" id="fillButton" type="button" disabled>填写高置信字段</button>
+      </section>
+
+      <p class="status" id="statusText">打开招聘申请页面后开始扫描。扩展不会点击最终提交。</p>
+
+      <section class="summary hidden" id="summary">
+        <div><strong id="totalCount">0</strong><span>发现字段</span></div>
+        <div><strong id="matchedCount">0</strong><span>可自动填写</span></div>
+        <div><strong id="unknownCount">0</strong><span>需要补充</span></div>
+      </section>
+
+      <section class="results hidden" id="resultsSection">
+        <div class="section-title"><h2>字段匹配</h2><span>绿色可填 · 橙色待确认</span></div>
+        <div id="fieldList" class="field-list"></div>
+      </section>
+
+      <section class="unknown hidden" id="unknownSection">
+        <div class="section-title"><h2>回答未知字段</h2><span>下次自动填写</span></div>
+        <div id="unknownList"></div>
+      </section>
+
+      <footer>资料只保存在职途助手和本机扩展中 · 提交前请复核</footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
