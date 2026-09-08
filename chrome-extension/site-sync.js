@@ -4,8 +4,18 @@
 
   const syncAll = async () => {
     try {
-      const { pendingMemories = [] } = await chrome.storage.local.get('pendingMemories');
-      const remaining = [];
+      const {
+        pendingMemories = [],
+        pendingApplications = [],
+        pendingStatusChecks = [],
+      } = await chrome.storage.local.get([
+        'pendingMemories',
+        'pendingApplications',
+        'pendingStatusChecks',
+      ]);
+      const remainingMemories = [];
+      const remainingApplications = [];
+      const remainingStatusChecks = [];
 
       for (const memory of pendingMemories) {
         try {
@@ -21,18 +31,50 @@
               scope: 'global',
             }),
           });
-          if (!response.ok) remaining.push(memory);
+          if (!response.ok) remainingMemories.push(memory);
         } catch {
-          remaining.push(memory);
+          remainingMemories.push(memory);
         }
       }
 
-      const response = await fetch('/api/dashboard', { credentials: 'same-origin' });
+      for (const job of pendingApplications) {
+        try {
+          const response = await fetch('/api/dashboard', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ type: 'capture-external-job', job }),
+          });
+          if (!response.ok) remainingApplications.push(job);
+        } catch {
+          remainingApplications.push(job);
+        }
+      }
+
+      for (const check of pendingStatusChecks) {
+        try {
+          const response = await fetch('/api/dashboard', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ type: 'extension-status-check', check }),
+          });
+          if (!response.ok) remainingStatusChecks.push(check);
+        } catch {
+          remainingStatusChecks.push(check);
+        }
+      }
+
+      const response = await fetch('/api/dashboard', {
+        credentials: 'same-origin',
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       await chrome.storage.local.set({
         trustedProfile: { ...payload, syncedAt: new Date().toISOString() },
-        pendingMemories: remaining,
+        pendingMemories: remainingMemories,
+        pendingApplications: remainingApplications,
+        pendingStatusChecks: remainingStatusChecks,
         profileSyncError: '',
       });
       return { ok: true };

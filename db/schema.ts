@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const profiles = sqliteTable('profiles', {
   id: text('id').primaryKey(),
@@ -24,33 +24,42 @@ export const resumes = sqliteTable('resumes', {
   createdAt: text('created_at').notNull(),
 });
 
-export const jobs = sqliteTable('jobs', {
-  id: text('id').primaryKey(),
-  company: text('company').notNull(),
-  title: text('title').notNull(),
-  location: text('location').notNull(),
-  source: text('source').notNull(),
-  url: text('url').notNull(),
-  matchScore: integer('match_score').notNull().default(0),
-  matchReasons: text('match_reasons').notNull().default('[]'),
-  status: text('status').notNull().default('new'),
-  postedAt: text('posted_at'),
-  discoveredAt: text('discovered_at').notNull(),
-});
+export const jobs = sqliteTable(
+  'jobs',
+  {
+    id: text('id').primaryKey(),
+    company: text('company').notNull(),
+    title: text('title').notNull(),
+    location: text('location').notNull(),
+    source: text('source').notNull(),
+    url: text('url').notNull(),
+    description: text('description').notNull().default(''),
+    matchScore: integer('match_score').notNull().default(0),
+    matchReasons: text('match_reasons').notNull().default('[]'),
+    status: text('status').notNull().default('new'),
+    postedAt: text('posted_at'),
+    discoveredAt: text('discovered_at').notNull(),
+  },
+  (table) => [index('idx_jobs_url').on(table.url)],
+);
 
-export const applications = sqliteTable('applications', {
-  id: text('id').primaryKey(),
-  jobId: text('job_id'),
-  company: text('company').notNull(),
-  title: text('title').notNull(),
-  location: text('location').notNull().default(''),
-  url: text('url').notNull().default(''),
-  status: text('status').notNull().default('draft'),
-  appliedAt: text('applied_at'),
-  lastCheckedAt: text('last_checked_at'),
-  nextAction: text('next_action').notNull().default(''),
-  notes: text('notes').notNull().default(''),
-});
+export const applications = sqliteTable(
+  'applications',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id'),
+    company: text('company').notNull(),
+    title: text('title').notNull(),
+    location: text('location').notNull().default(''),
+    url: text('url').notNull().default(''),
+    status: text('status').notNull().default('draft'),
+    appliedAt: text('applied_at'),
+    lastCheckedAt: text('last_checked_at'),
+    nextAction: text('next_action').notNull().default(''),
+    notes: text('notes').notNull().default(''),
+  },
+  (table) => [index('idx_applications_url').on(table.url)],
+);
 
 export const answerMemory = sqliteTable('answer_memory', {
   id: text('id').primaryKey(),
@@ -105,7 +114,9 @@ export const internshipExperiences = sqliteTable('internship_experiences', {
   position: text('position').notNull().default(''),
   startDate: text('start_date').notNull().default(''),
   endDate: text('end_date').notNull().default(''),
-  isCurrent: integer('is_current', { mode: 'boolean' }).notNull().default(false),
+  isCurrent: integer('is_current', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   description: text('description').notNull().default(''),
   sortOrder: integer('sort_order').notNull().default(0),
   updatedAt: text('updated_at').notNull(),
@@ -117,7 +128,9 @@ export const projectExperiences = sqliteTable('project_experiences', {
   role: text('role').notNull().default('Agent开发'),
   startDate: text('start_date').notNull().default(''),
   endDate: text('end_date').notNull().default(''),
-  isCurrent: integer('is_current', { mode: 'boolean' }).notNull().default(false),
+  isCurrent: integer('is_current', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   description: text('description').notNull().default(''),
   sortOrder: integer('sort_order').notNull().default(0),
   updatedAt: text('updated_at').notNull(),

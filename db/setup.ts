@@ -15,7 +15,7 @@ const statements = [
   )`,
   `CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY, company TEXT NOT NULL, title TEXT NOT NULL,
-    location TEXT NOT NULL, source TEXT NOT NULL, url TEXT NOT NULL,
+    location TEXT NOT NULL, source TEXT NOT NULL, url TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
     match_score INTEGER NOT NULL DEFAULT 0, match_reasons TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'new', posted_at TEXT, discovered_at TEXT NOT NULL
   )`,
@@ -33,6 +33,8 @@ const statements = [
     id TEXT PRIMARY KEY, application_id TEXT NOT NULL, old_status TEXT NOT NULL,
     new_status TEXT NOT NULL, checked_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'manual'
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_jobs_url ON jobs(url)`,
+  `CREATE INDEX IF NOT EXISTS idx_applications_url ON applications(url)`,
   `CREATE TABLE IF NOT EXISTS education_experiences (
     id TEXT PRIMARY KEY, school_name TEXT NOT NULL DEFAULT '', college_name TEXT NOT NULL DEFAULT '',
     major_name TEXT NOT NULL DEFAULT '', degree TEXT NOT NULL DEFAULT '', start_date TEXT NOT NULL DEFAULT '',
@@ -72,6 +74,14 @@ export function ensureDatabase() {
   if (!ready) {
     ready = (async () => {
       await env.DB.batch(statements.map((sql) => env.DB.prepare(sql)));
+      const jobColumns = await env.DB.prepare('PRAGMA table_info(jobs)').all<{
+        name: string;
+      }>();
+      if (!jobColumns.results.some((column) => column.name === 'description')) {
+        await env.DB.prepare(
+          "ALTER TABLE jobs ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        ).run();
+      }
       await env.DB.prepare('PRAGMA optimize').run();
     })();
   }

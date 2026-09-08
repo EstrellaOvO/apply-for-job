@@ -1,4 +1,5 @@
-const SITE_ORIGIN = 'https://job-application-companion.alight-hare-2905.chatgpt.site';
+const SITE_ORIGIN =
+  'https://job-application-companion.alight-hare-2905.chatgpt.site';
 
 const elements = {
   syncTitle: document.getElementById('syncTitle'),
@@ -6,6 +7,7 @@ const elements = {
   syncButton: document.getElementById('syncButton'),
   scanButton: document.getElementById('scanButton'),
   fillButton: document.getElementById('fillButton'),
+  checkButton: document.getElementById('checkButton'),
   statusText: document.getElementById('statusText'),
   summary: document.getElementById('summary'),
   totalCount: document.getElementById('totalCount'),
@@ -19,32 +21,62 @@ const elements = {
 
 let lastScan = null;
 
-const normalize = (value = '') => value.toLowerCase().replace(/[\s\-_:/：*（）()【】\[\].,，。?？]/g, '');
+const normalize = (value = '') =>
+  value.toLowerCase().replace(/[\s\-_:/：*（）()【】\[\].,，。?？]/g, '');
 const hash = (value) => {
   let result = 5381;
-  for (const char of value) result = ((result << 5) + result) ^ char.charCodeAt(0);
+  for (const char of value)
+    result = ((result << 5) + result) ^ char.charCodeAt(0);
   return (result >>> 0).toString(36);
 };
-const escapeHtml = (value = '') => value.replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+const escapeHtml = (value = '') =>
+  value.replace(
+    /[&<>'"]/g,
+    (char) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[
+        char
+      ],
+  );
 
-const getActiveTab = async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+const getActiveTab = async () =>
+  (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
 
 const updateProfileStatus = async () => {
-  const { trustedProfile, pendingMemories = [], profileSyncError = '' } = await chrome.storage.local.get(['trustedProfile', 'pendingMemories', 'profileSyncError']);
+  const {
+    trustedProfile,
+    pendingMemories = [],
+    pendingApplications = [],
+    pendingStatusChecks = [],
+    profileSyncError = '',
+  } = await chrome.storage.local.get([
+    'trustedProfile',
+    'pendingMemories',
+    'pendingApplications',
+    'pendingStatusChecks',
+    'profileSyncError',
+  ]);
   if (!trustedProfile) {
     elements.syncTitle.textContent = '尚未同步可信资料';
-    elements.syncDetail.textContent = profileSyncError || '打开职途助手即可自动同步';
+    elements.syncDetail.textContent =
+      profileSyncError || '打开职途助手即可自动同步';
     elements.syncButton.textContent = '打开';
     return;
   }
   const time = new Date(trustedProfile.syncedAt);
   elements.syncTitle.textContent = '可信资料已就绪';
-  elements.syncDetail.textContent = `${time.toLocaleString('zh-CN')} 同步${pendingMemories.length ? ` · ${pendingMemories.length} 条答案待回写` : ''}`;
+  const pendingCount =
+    pendingMemories.length +
+    pendingApplications.length +
+    pendingStatusChecks.length;
+  elements.syncDetail.textContent = `${time.toLocaleString('zh-CN')} 同步${pendingCount ? ` · ${pendingCount} 条记录待回写` : ''}`;
   elements.syncButton.textContent = '刷新';
 };
 
 const ensureScanner = async (tabId) => {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  });
 };
 
 const messageTab = async (type) => {
@@ -52,6 +84,17 @@ const messageTab = async (type) => {
   if (!tab?.id) throw new Error('找不到当前标签页');
   await ensureScanner(tab.id);
   return chrome.tabs.sendMessage(tab.id, { type });
+};
+
+const syncOpenSiteTabs = async () => {
+  const siteTabs = await chrome.tabs.query({ url: `${SITE_ORIGIN}/*` });
+  await Promise.allSettled(
+    siteTabs
+      .filter((tab) => tab.id)
+      .map((tab) =>
+        chrome.tabs.sendMessage(tab.id, { type: 'SYNC_SITE_PROFILE' }),
+      ),
+  );
 };
 
 const renderScan = (scan) => {
@@ -63,42 +106,64 @@ const renderScan = (scan) => {
   elements.unknownCount.textContent = String(scan.unknown);
   elements.fillButton.disabled = scan.matched === 0;
   elements.statusText.textContent = `已识别 ${scan.total} 个字段，其中 ${scan.matched} 个可从可信资料自动填写。`;
-  elements.fieldList.innerHTML = scan.fields.map((field) => `
+  elements.fieldList.innerHTML = scan.fields
+    .map(
+      (field) => `
     <div class="field-row ${field.value ? 'matched' : ''}">
       <span class="field-dot"></span>
       <div class="field-copy"><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(field.source)}${field.value ? ` · ${escapeHtml(field.value)}` : field.currentValue ? ` · 页面值：${escapeHtml(field.currentValue)}` : ''}</span></div>
       <span class="confidence">${field.confidence ? `${field.confidence}%` : '待确认'}</span>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 
   const unknown = scan.fields.filter((field) => !field.value).slice(0, 8);
   elements.unknownSection.classList.toggle('hidden', unknown.length === 0);
-  elements.unknownList.innerHTML = unknown.map((field) => `
+  elements.unknownList.innerHTML = unknown
+    .map(
+      (field) => `
     <div class="unknown-item">
       <label for="answer-${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
       <div class="answer-row"><input id="answer-${escapeHtml(field.id)}" data-field-id="${escapeHtml(field.id)}" value="${escapeHtml(field.currentValue || '')}" placeholder="输入以后使用的答案" /><button type="button" data-save-id="${escapeHtml(field.id)}">记住</button></div>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 
   elements.unknownList.querySelectorAll('[data-save-id]').forEach((button) => {
-    button.addEventListener('click', () => void saveUnknownAnswer(button.dataset.saveId));
+    button.addEventListener(
+      'click',
+      () => void saveUnknownAnswer(button.dataset.saveId),
+    );
   });
 };
 
 const saveUnknownAnswer = async (fieldId) => {
   const field = lastScan?.fields.find((item) => item.id === fieldId);
-  const input = elements.unknownList.querySelector(`[data-field-id="${CSS.escape(fieldId)}"]`);
+  const input = elements.unknownList.querySelector(
+    `[data-field-id="${CSS.escape(fieldId)}"]`,
+  );
   const value = input?.value.trim();
   if (!field || !value) return;
 
   const storageKey = normalize(field.label);
   const fieldKey = field.key || `extension_${hash(storageKey)}`;
-  const { fieldMemories = {}, pendingMemories = [] } = await chrome.storage.local.get(['fieldMemories', 'pendingMemories']);
+  const { fieldMemories = {}, pendingMemories = [] } =
+    await chrome.storage.local.get(['fieldMemories', 'pendingMemories']);
   fieldMemories[storageKey] = { fieldKey, label: field.label, value };
-  const memory = { id: crypto.randomUUID(), fieldKey, label: field.label, value };
+  const memory = {
+    id: crypto.randomUUID(),
+    fieldKey,
+    label: field.label,
+    value,
+  };
   await chrome.storage.local.set({
     fieldMemories,
-    pendingMemories: [...pendingMemories.filter((item) => item.fieldKey !== fieldKey), memory],
+    pendingMemories: [
+      ...pendingMemories.filter((item) => item.fieldKey !== fieldKey),
+      memory,
+    ],
   });
   elements.statusText.textContent = `已记住“${field.label}”，打开职途助手时会自动回写。`;
   renderScan(await messageTab('SCAN_FORM'));
@@ -125,11 +190,33 @@ elements.fillButton.addEventListener('click', async () => {
   try {
     const result = await messageTab('FILL_FORM');
     if (!result?.ok) throw new Error(result?.error || '填写失败');
-    elements.statusText.textContent = `已填写 ${result.filled} 个字段。请逐项复核后自行提交申请。`;
+    await syncOpenSiteTabs();
+    const jobName = result.job
+      ? `${result.job.company} · ${result.job.title}`
+      : '当前岗位';
+    elements.statusText.textContent = `已填写 ${result.filled} 个字段，并记录 ${jobName}。请复核后自行提交申请。`;
     elements.fillButton.textContent = '已完成填写';
+    await updateProfileStatus();
   } catch (error) {
     elements.statusText.textContent = `填写失败：${error instanceof Error ? error.message : '未知错误'}`;
     elements.fillButton.disabled = false;
+  }
+});
+
+elements.checkButton.addEventListener('click', async () => {
+  elements.checkButton.disabled = true;
+  elements.statusText.textContent = '正在识别当前页面的申请状态…';
+  try {
+    const result = await messageTab('CHECK_STATUS');
+    if (!result?.ok) throw new Error(result?.error || '没有识别到状态');
+    await syncOpenSiteTabs();
+    elements.statusText.textContent =
+      '已识别申请状态并排队回写；打开职途助手后即可看到最新检查时间。';
+    await updateProfileStatus();
+  } catch (error) {
+    elements.statusText.textContent = `状态检查失败：${error instanceof Error ? error.message : '当前页面没有明确状态'}`;
+  } finally {
+    elements.checkButton.disabled = false;
   }
 });
 

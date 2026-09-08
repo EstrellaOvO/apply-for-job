@@ -64,6 +64,7 @@ type Job = {
   location: string;
   source: string;
   url: string;
+  description?: string;
   match_score: number;
   match_reasons: string;
   status: string;
@@ -105,6 +106,28 @@ type DashboardData = {
   languages: LanguageRecord[];
   internships: InternshipRecord[];
   projects: ProjectRecord[];
+};
+
+type ApplicationDraft = {
+  company: string;
+  title: string;
+  location: string;
+  url: string;
+  status: string;
+  applied_at: string;
+  next_action: string;
+  notes: string;
+};
+
+const emptyApplicationDraft: ApplicationDraft = {
+  company: '',
+  title: '',
+  location: '',
+  url: '',
+  status: 'draft',
+  applied_at: '',
+  next_action: '',
+  notes: '',
 };
 
 const emptyProfile: Profile = {
@@ -213,15 +236,12 @@ export function JobAssistant() {
   const [siteUrl, setSiteUrl] = useState('');
   const [answer, setAnswer] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [applicationDraft, setApplicationDraft] = useState({
-    company: '',
-    title: '',
-    location: '',
-    url: '',
-    status: 'draft',
-    next_action: '',
-    notes: '',
-  });
+  const [applicationDraft, setApplicationDraft] = useState<ApplicationDraft>(
+    emptyApplicationDraft,
+  );
+  const [editingApplicationId, setEditingApplicationId] = useState<
+    string | null
+  >(null);
 
   const refresh = async (quiet = false) => {
     try {
@@ -387,31 +407,33 @@ export function JobAssistant() {
     setView('jobs');
   };
 
-  const createApplication = async (draft = applicationDraft) => {
+  const createApplication = async (
+    draft = applicationDraft,
+    applicationId = editingApplicationId,
+  ) => {
     if (!draft.company.trim() || !draft.title.trim()) {
       setNotice('请至少填写公司和岗位名称。');
       return;
     }
     setBusy(true);
     try {
+      const appliedAt = draft.applied_at
+        ? new Date(draft.applied_at).toISOString()
+        : draft.status === 'draft'
+          ? ''
+          : new Date().toISOString();
       await callApi({
-        type: 'add-application',
+        type: applicationId ? 'update-application' : 'add-application',
+        id: applicationId,
         application: {
           ...draft,
-          applied_at: draft.status === 'draft' ? '' : new Date().toISOString(),
+          applied_at: appliedAt,
         },
       });
-      setNotice('投递记录已创建。');
+      setNotice(applicationId ? '投递记录已更新。' : '投递记录已创建。');
       setModal(null);
-      setApplicationDraft({
-        company: '',
-        title: '',
-        location: '',
-        url: '',
-        status: 'draft',
-        next_action: '',
-        notes: '',
-      });
+      setEditingApplicationId(null);
+      setApplicationDraft(emptyApplicationDraft);
       await refresh(true);
       setView('applications');
     } catch (error) {
@@ -422,15 +444,57 @@ export function JobAssistant() {
   };
 
   const addJobToApplications = (job: Job) =>
-    void createApplication({
-      company: job.company,
-      title: job.title,
-      location: job.location,
-      url: job.url,
-      status: 'draft',
-      next_action: '确认信息并完成投递',
-      notes: `岗位匹配度 ${job.match_score}%`,
+    void createApplication(
+      {
+        company: job.company,
+        title: job.title,
+        location: job.location,
+        url: job.url,
+        status: 'draft',
+        applied_at: '',
+        next_action: '确认信息并完成投递',
+        notes: `岗位匹配度 ${job.match_score}%`,
+      },
+      null,
+    );
+
+  const openNewApplication = () => {
+    setEditingApplicationId(null);
+    setApplicationDraft(emptyApplicationDraft);
+    setModal('application');
+  };
+
+  const openEditApplication = (application: Application) => {
+    const appliedAt = application.applied_at
+      ? new Date(
+          new Date(application.applied_at).getTime() -
+            new Date(application.applied_at).getTimezoneOffset() * 60_000,
+        )
+          .toISOString()
+          .slice(0, 16)
+      : '';
+    setEditingApplicationId(application.id);
+    setApplicationDraft({
+      company: application.company,
+      title: application.title,
+      location: application.location,
+      url: application.url,
+      status: application.status,
+      applied_at: appliedAt,
+      next_action: application.next_action,
+      notes: application.notes,
     });
+    setModal('application');
+  };
+
+  const openStatusPage = (application: Application) => {
+    if (!application.url) {
+      setNotice('这条记录还没有申请链接，请先编辑并补充链接。');
+      return;
+    }
+    window.open(application.url, '_blank', 'noopener,noreferrer');
+    setNotice('已打开申请页面。登录后点击扩展中的“检查当前页面的申请状态”。');
+  };
 
   const updateStatus = async (application: Application, status: string) => {
     setBusy(true);
@@ -593,7 +657,9 @@ export function JobAssistant() {
             <ApplicationsView
               applications={data.applications}
               busy={busy}
-              onAdd={() => setModal('application')}
+              onAdd={openNewApplication}
+              onEdit={openEditApplication}
+              onCheck={openStatusPage}
               onStatus={updateStatus}
             />
           )}
@@ -762,13 +828,22 @@ export function JobAssistant() {
 
       <Dialog
         open={modal === 'application'}
-        onOpenChange={(open) => !open && setModal(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModal(null);
+            setEditingApplicationId(null);
+          }
+        }}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>添加投递记录</DialogTitle>
+            <DialogTitle>
+              {editingApplicationId ? '编辑投递记录' : '添加投递记录'}
+            </DialogTitle>
             <DialogDescription>
-              把已投递或准备投递的岗位统一纳入跟踪。
+              {editingApplicationId
+                ? '修改投递时间、下一步及岗位信息。'
+                : '把已投递或准备投递的岗位统一纳入跟踪。'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
@@ -842,6 +917,19 @@ export function JobAssistant() {
             />
           </label>
           <label className={fieldClass}>
+            投递时间
+            <Input
+              type="datetime-local"
+              value={applicationDraft.applied_at}
+              onChange={(event) =>
+                setApplicationDraft({
+                  ...applicationDraft,
+                  applied_at: event.target.value,
+                })
+              }
+            />
+          </label>
+          <label className={fieldClass}>
             下一步
             <Textarea
               value={applicationDraft.next_action}
@@ -854,12 +942,26 @@ export function JobAssistant() {
               placeholder="例如：周五前完成在线测评"
             />
           </label>
+          <label className={fieldClass}>
+            备注 / JD 摘要
+            <Textarea
+              className="min-h-28"
+              value={applicationDraft.notes}
+              onChange={(event) =>
+                setApplicationDraft({
+                  ...applicationDraft,
+                  notes: event.target.value,
+                })
+              }
+              placeholder="可记录岗位要求、联系人或跟进备注"
+            />
+          </label>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModal(null)}>
               取消
             </Button>
             <Button disabled={busy} onClick={() => createApplication()}>
-              保存记录
+              {editingApplicationId ? '保存修改' : '保存记录'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,6 +1219,18 @@ function JobsView({
           指定招聘网站
         </Button>
       </div>
+      <div className="flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/[0.04] p-4 text-xs">
+        <Sparkles className="size-5 shrink-0 text-primary" />
+        <div className="flex-1">
+          <p className="font-medium">添加外部招聘公司的岗位</p>
+          <p className="mt-1 leading-5 text-muted-foreground">
+            打开外部岗位页面并使用 Chrome
+            扩展填写表单，扩展会提取公司、岗位、地点、链接和
+            JD，同时在这里及投递记录中创建条目。
+          </p>
+        </div>
+        <Badge variant="outline">扩展自动导入</Badge>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {jobs.map((job) => (
           <Card
@@ -1129,7 +1243,9 @@ function JobsView({
                   <Building2 className="size-5" />
                 </div>
                 <Badge className="border-0 bg-[#e2eee9] text-[#2d6953]">
-                  {job.match_score}% 匹配
+                  {job.match_score > 0
+                    ? `${job.match_score}% 匹配`
+                    : '外部导入'}
                 </Badge>
               </div>
               <CardTitle className="mt-3">{job.title}</CardTitle>
@@ -1148,15 +1264,33 @@ function JobsView({
                   </span>
                 ))}
               </div>
+              {job.description && (
+                <p className="mb-4 max-h-16 overflow-hidden text-xs leading-5 text-muted-foreground">
+                  {job.description}
+                </p>
+              )}
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>
                   {job.posted_at
                     ? `${formatDate(job.posted_at)} 发布`
                     : '近期发布'}
                 </span>
-                <Button size="sm" onClick={() => onAdd(job)}>
-                  加入投递 <ArrowUpRight />
-                </Button>
+                <div className="flex gap-2">
+                  {job.url && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        window.open(job.url, '_blank', 'noopener,noreferrer')
+                      }
+                    >
+                      查看原页
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => onAdd(job)}>
+                    加入投递 <ArrowUpRight />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1170,11 +1304,15 @@ function ApplicationsView({
   applications,
   busy,
   onAdd,
+  onEdit,
+  onCheck,
   onStatus,
 }: {
   applications: Application[];
   busy: boolean;
   onAdd: () => void;
+  onEdit: (application: Application) => void;
+  onCheck: (application: Application) => void;
   onStatus: (application: Application, status: string) => void;
 }) {
   const columns = ['draft', 'submitted', 'assessment', 'interview'];
@@ -1224,7 +1362,7 @@ function ApplicationsView({
               return (
                 <article
                   key={application.id}
-                  className="grid gap-3 border-b border-border/65 px-4 py-4 last:border-0 md:grid-cols-[minmax(0,1.3fr)_120px_150px_minmax(160px,1fr)_120px] md:items-center"
+                  className="grid gap-3 border-b border-border/65 px-4 py-4 last:border-0 md:grid-cols-[minmax(0,1.25fr)_110px_130px_minmax(150px,1fr)_210px] md:items-center"
                 >
                   <div>
                     <p className="text-sm font-semibold">{application.title}</p>
@@ -1239,6 +1377,9 @@ function ApplicationsView({
                   <div className="text-xs">
                     <p className="text-muted-foreground">投递时间</p>
                     <p className="mt-1">{formatDate(application.applied_at)}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      检查：{formatDate(application.last_checked_at)}
+                    </p>
                   </div>
                   <div className="text-xs">
                     <p className="text-muted-foreground">下一步</p>
@@ -1246,20 +1387,39 @@ function ApplicationsView({
                       {application.next_action || '等待更新'}
                     </p>
                   </div>
-                  <NativeSelect
-                    disabled={busy}
-                    className="w-full"
-                    value={application.status}
-                    onChange={(event) =>
-                      onStatus(application, event.target.value)
-                    }
-                  >
-                    {Object.entries(statusMap).map(([value, item]) => (
-                      <NativeSelectOption key={value} value={value}>
-                        {item.label}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                  <div className="space-y-2">
+                    <NativeSelect
+                      disabled={busy}
+                      className="w-full"
+                      value={application.status}
+                      onChange={(event) =>
+                        onStatus(application, event.target.value)
+                      }
+                    >
+                      {Object.entries(statusMap).map(([value, item]) => (
+                        <NativeSelectOption key={value} value={value}>
+                          {item.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEdit(application)}
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!application.url}
+                        onClick={() => onCheck(application)}
+                      >
+                        检查状态
+                      </Button>
+                    </div>
+                  </div>
                 </article>
               );
             })
@@ -1279,12 +1439,12 @@ function ApplicationsView({
       <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-xs">
         <BellRing className="size-5 text-primary" />
         <div className="flex-1">
-          <p className="font-medium">定期状态检查</p>
+          <p className="font-medium">浏览器辅助状态检查</p>
           <p className="mt-1 text-muted-foreground">
-            计划每周一、周四检查一次；登录保护的网站会提醒你在浏览器中确认。
+            点击记录中的“检查状态”打开申请页面，登录后用扩展识别状态并回写。招聘网站需要登录或验证码时，无法在后台无人值守检查。
           </p>
         </div>
-        <Badge variant="outline">待接入目标网站</Badge>
+        <Badge variant="outline">扩展回写</Badge>
       </div>
     </div>
   );

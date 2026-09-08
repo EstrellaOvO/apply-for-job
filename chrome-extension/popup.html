@@ -10,21 +10,36 @@
     <main>
       <header class="brand">
         <div class="brand-mark">职</div>
-        <div><h1>职途助手</h1><p>检查后再自动填写</p></div>
-        <span class="version">MVP</span>
+        <div>
+          <h1>职途助手</h1>
+          <p>检查后再自动填写</p>
+        </div>
+        <span class="version">0.2</span>
       </header>
 
       <section class="sync-card" id="syncCard">
-        <div><strong id="syncTitle">正在检查资料…</strong><p id="syncDetail">请稍候</p></div>
+        <div>
+          <strong id="syncTitle">正在检查资料…</strong>
+          <p id="syncDetail">请稍候</p>
+        </div>
         <button class="link-button" id="syncButton" type="button">同步</button>
       </section>
 
       <section class="actions">
-        <button class="primary" id="scanButton" type="button">扫描当前页面</button>
-        <button class="secondary" id="fillButton" type="button" disabled>填写高置信字段</button>
+        <button class="primary" id="scanButton" type="button">
+          扫描当前页面
+        </button>
+        <button class="secondary" id="fillButton" type="button" disabled>
+          填写高置信字段
+        </button>
+        <button class="secondary wide" id="checkButton" type="button">
+          检查当前页面的申请状态
+        </button>
       </section>
 
-      <p class="status" id="statusText">打开招聘申请页面后开始扫描。扩展不会点击最终提交。</p>
+      <p class="status" id="statusText">
+        打开招聘申请页面后开始扫描。扩展不会点击最终提交。
+      </p>
 
       <section class="summary hidden" id="summary">
         <div><strong id="totalCount">0</strong><span>发现字段</span></div>
@@ -33,12 +48,18 @@
       </section>
 
       <section class="results hidden" id="resultsSection">
-        <div class="section-title"><h2>字段匹配</h2><span>绿色可填 · 橙色待确认</span></div>
+        <div class="section-title">
+          <h2>字段匹配</h2>
+          <span>绿色可填 · 橙色待确认</span>
+        </div>
         <div id="fieldList" class="field-list"></div>
       </section>
 
       <section class="unknown hidden" id="unknownSection">
-        <div class="section-title"><h2>回答未知字段</h2><span>下次自动填写</span></div>
+        <div class="section-title">
+          <h2>回答未知字段</h2>
+          <span>下次自动填写</span>
+        </div>
         <div id="unknownList"></div>
       </section>
 
