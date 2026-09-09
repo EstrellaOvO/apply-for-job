@@ -801,7 +801,7 @@
       ],
       [
         'submitted',
-        /(已投递|投递成功|申请成功|已收到申请|application submitted|application received|under review)/i,
+        /(已投递|投递成功|申请成功|已收到申请|网申成功|application submitted|application received|under review)/i,
       ],
     ];
     const match = rules.find(([, pattern]) => pattern.test(pageText));
