@@ -6,6 +6,7 @@ import {
   BellRing,
   BriefcaseBusiness,
   Building2,
+  CalendarDays,
   Check,
   ChevronRight,
   CircleUserRound,
@@ -18,9 +19,21 @@ import {
   Plus,
   Search,
   Sparkles,
+  Trash2,
   UploadCloud,
   X,
 } from 'lucide-react';
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -212,6 +225,149 @@ const parseReasons = (value: string) => {
   } catch {
     return [];
   }
+};
+
+type ApplicationReminder = {
+  application: Application;
+  dueDate: Date;
+  dayDifference: number;
+  action: string;
+};
+
+const startOfLocalDay = (value: Date) =>
+  new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const validLocalDate = (year: number, month: number, day: number) => {
+  const value = new Date(year, month - 1, day);
+  return value.getFullYear() === year &&
+    value.getMonth() === month - 1 &&
+    value.getDate() === day
+    ? value
+    : null;
+};
+
+const chineseDayNumber = (value: string) => {
+  if (/^\d+$/.test(value)) return Number(value);
+  const digits: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  if (value === '十') return 10;
+  const [tens, ones] = value.split('十');
+  if (value.includes('十'))
+    return (
+      (tens ? (digits[tens] ?? 0) : 1) * 10 + (ones ? (digits[ones] ?? 0) : 0)
+    );
+  return digits[value] ?? 0;
+};
+
+const extractApplicationReminder = (
+  application: Application,
+  reference = new Date(),
+): ApplicationReminder | null => {
+  const text = application.next_action.trim();
+  if (
+    !text ||
+    application.status === 'offer' ||
+    application.status === 'rejected'
+  )
+    return null;
+
+  const today = startOfLocalDay(reference);
+  let dueDate: Date | null = null;
+  let matchedText = '';
+  const fullDate = text.match(
+    /(20\d{2})\s*[年./-]\s*(\d{1,2})\s*[月./-]\s*(\d{1,2})\s*日?/,
+  );
+
+  if (fullDate) {
+    dueDate = validLocalDate(
+      Number(fullDate[1]),
+      Number(fullDate[2]),
+      Number(fullDate[3]),
+    );
+    matchedText = fullDate[0];
+  } else {
+    const monthDay = text.match(
+      /(?<!\d)(\d{1,2})\s*(?:月|[./-])\s*(\d{1,2})\s*日?/,
+    );
+    if (monthDay) {
+      dueDate = validLocalDate(
+        today.getFullYear(),
+        Number(monthDay[1]),
+        Number(monthDay[2]),
+      );
+      if (dueDate && dueDate.getTime() < today.getTime() - 180 * 86_400_000)
+        dueDate = validLocalDate(
+          today.getFullYear() + 1,
+          Number(monthDay[1]),
+          Number(monthDay[2]),
+        );
+      matchedText = monthDay[0];
+    } else {
+      const relative = text.match(
+        /(今天|明天|后天|大后天|(?:\d{1,3}|[一二两三四五六七八九十]+)\s*天后)/,
+      );
+      if (relative) {
+        const fixedDays: Record<string, number> = {
+          今天: 0,
+          明天: 1,
+          后天: 2,
+          大后天: 3,
+        };
+        const days =
+          fixedDays[relative[1]] ??
+          chineseDayNumber(relative[1].replace(/\s*天后$/, ''));
+        dueDate = new Date(today);
+        dueDate.setDate(dueDate.getDate() + days);
+        matchedText = relative[0];
+      }
+    }
+  }
+
+  if (!dueDate) return null;
+  const dayDifference = Math.round(
+    (startOfLocalDay(dueDate).getTime() - today.getTime()) / 86_400_000,
+  );
+  const action = text
+    .replace(matchedText, ' ')
+    .replace(/^(?:请于|于|在|截止|前|之前)\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    application,
+    dueDate,
+    dayDifference,
+    action: action || '处理下一步事项',
+  };
+};
+
+const reminderTiming = (dayDifference: number) => {
+  if (dayDifference < 0)
+    return {
+      label: `已逾期 ${Math.abs(dayDifference)} 天`,
+      className: 'bg-destructive/10 text-destructive',
+    };
+  if (dayDifference === 0)
+    return { label: '今天', className: 'bg-[#f5e2dc] text-[#944936]' };
+  if (dayDifference === 1)
+    return { label: '明天', className: 'bg-[#f8ead2] text-[#8a5b1f]' };
+  return {
+    label: `${dayDifference} 天后`,
+    className:
+      dayDifference <= 2
+        ? 'bg-[#f8ead2] text-[#8a5b1f]'
+        : 'bg-[#e2eee9] text-[#2d6953]',
+  };
 };
 
 export function JobAssistant() {
@@ -509,6 +665,21 @@ export function JobAssistant() {
     }
   };
 
+  const deleteApplication = async (application: Application) => {
+    setBusy(true);
+    try {
+      await callApi({ type: 'delete-application', id: application.id });
+      setNotice(
+        `已删除 ${application.company} · ${application.title} 的投递记录。`,
+      );
+      await refresh(true);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const title = {
     dashboard: '上午好，今天继续向前一步',
     jobs: '找到真正适合你的机会',
@@ -661,6 +832,7 @@ export function JobAssistant() {
               onEdit={openEditApplication}
               onCheck={openStatusPage}
               onStatus={updateStatus}
+              onDelete={deleteApplication}
             />
           )}
           {view === 'autofill' && (
@@ -939,8 +1111,11 @@ export function JobAssistant() {
                   next_action: event.target.value,
                 })
               }
-              placeholder="例如：周五前完成在线测评"
+              placeholder="例如：9月14日完成在线笔试"
             />
+            <span className="font-normal text-muted-foreground">
+              写入具体日期或“两天后”等相对日期，会自动加入临期提醒。
+            </span>
           </label>
           <label className={fieldClass}>
             备注 / JD 摘要
@@ -1307,6 +1482,7 @@ function ApplicationsView({
   onEdit,
   onCheck,
   onStatus,
+  onDelete,
 }: {
   applications: Application[];
   busy: boolean;
@@ -1314,8 +1490,21 @@ function ApplicationsView({
   onEdit: (application: Application) => void;
   onCheck: (application: Application) => void;
   onStatus: (application: Application, status: string) => void;
+  onDelete: (application: Application) => void;
 }) {
+  const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
   const columns = ['draft', 'submitted', 'assessment', 'interview'];
+  const reminders = useMemo(
+    () =>
+      applications
+        .map((application) => extractApplicationReminder(application))
+        .filter((item): item is ApplicationReminder => Boolean(item))
+        .filter((item) => item.dayDifference <= 14)
+        .sort(
+          (left, right) => left.dueDate.getTime() - right.dueDate.getTime(),
+        ),
+    [applications],
+  );
   return (
     <div className="mt-6 space-y-6">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1342,6 +1531,63 @@ function ApplicationsView({
           </Card>
         ))}
       </div>
+      <Card className="gap-0 overflow-hidden border-0 shadow-none ring-border/80">
+        <CardHeader className="flex-row items-center justify-between border-b border-border/70 py-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-9 place-items-center rounded-xl bg-accent text-accent-foreground">
+              <CalendarDays className="size-4" />
+            </div>
+            <div>
+              <CardTitle>临期提醒</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                自动识别“下一步”中的日期，展示已逾期和未来 14 天事项
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline">{reminders.length} 项</Badge>
+        </CardHeader>
+        <CardContent className="p-4">
+          {reminders.length ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {reminders.map((reminder) => {
+                const timing = reminderTiming(reminder.dayDifference);
+                return (
+                  <article
+                    key={reminder.application.id}
+                    className="rounded-xl border border-border/70 bg-background p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <Badge className={`${timing.className} border-0`}>
+                        {timing.label}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Intl.DateTimeFormat('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          weekday: 'short',
+                        }).format(reminder.dueDate)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold">
+                      {reminder.application.company} · {reminder.action}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {reminder.application.title}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
+              <p className="text-sm font-medium">未来 14 天没有临期事项</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                在“下一步”中填写“9月14日笔试”或“两天后面试”即可自动显示。
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card className="gap-0 border-0 shadow-none ring-border/80">
         <CardHeader className="flex-row items-center justify-between border-b border-border/70 py-4">
           <div>
@@ -1402,7 +1648,7 @@ function ApplicationsView({
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1417,6 +1663,15 @@ function ApplicationsView({
                         onClick={() => onCheck(application)}
                       >
                         检查状态
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => setDeleteTarget(application)}
+                      >
+                        <Trash2 />
+                        删除
                       </Button>
                     </div>
                   </div>
@@ -1446,6 +1701,38 @@ function ApplicationsView({
         </div>
         <Badge variant="outline">扩展回写</Badge>
       </div>
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除这条投递记录？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `${deleteTarget.company} · ${deleteTarget.title} 的投递记录和状态检查历史将一并删除。此操作无法撤销。`
+                : '投递记录和状态检查历史将一并删除。'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busy}
+              onClick={() => {
+                const target = deleteTarget;
+                setDeleteTarget(null);
+                if (target) void onDelete(target);
+              }}
+            >
+              {busy ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

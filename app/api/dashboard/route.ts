@@ -328,6 +328,26 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, checkedAt });
   }
 
+  if (type === 'delete-application') {
+    const id = cleanText(body.id, 100);
+    if (!id)
+      return Response.json({ error: '缺少投递记录 ID' }, { status: 400 });
+    const application = await env.DB.prepare(
+      'SELECT id FROM applications WHERE id = ?',
+    )
+      .bind(id)
+      .first<{ id: string }>();
+    if (!application)
+      return Response.json({ error: '投递记录不存在' }, { status: 404 });
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM status_checks WHERE application_id = ?').bind(
+        id,
+      ),
+      env.DB.prepare('DELETE FROM applications WHERE id = ?').bind(id),
+    ]);
+    return Response.json({ ok: true });
+  }
+
   if (type === 'update-application') {
     const id = cleanText(body.id, 100);
     const application = (body.application ?? {}) as Record<string, unknown>;
