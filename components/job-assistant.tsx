@@ -246,29 +246,6 @@ const validLocalDate = (year: number, month: number, day: number) => {
     : null;
 };
 
-const chineseDayNumber = (value: string) => {
-  if (/^\d+$/.test(value)) return Number(value);
-  const digits: Record<string, number> = {
-    一: 1,
-    二: 2,
-    两: 2,
-    三: 3,
-    四: 4,
-    五: 5,
-    六: 6,
-    七: 7,
-    八: 8,
-    九: 9,
-  };
-  if (value === '十') return 10;
-  const [tens, ones] = value.split('十');
-  if (value.includes('十'))
-    return (
-      (tens ? (digits[tens] ?? 0) : 1) * 10 + (ones ? (digits[ones] ?? 0) : 0)
-    );
-  return digits[value] ?? 0;
-};
-
 const extractApplicationReminder = (
   application: Application,
   reference = new Date(),
@@ -312,24 +289,6 @@ const extractApplicationReminder = (
           Number(monthDay[2]),
         );
       matchedText = monthDay[0];
-    } else {
-      const relative = text.match(
-        /(今天|明天|后天|大后天|(?:\d{1,3}|[一二两三四五六七八九十]+)\s*天后)/,
-      );
-      if (relative) {
-        const fixedDays: Record<string, number> = {
-          今天: 0,
-          明天: 1,
-          后天: 2,
-          大后天: 3,
-        };
-        const days =
-          fixedDays[relative[1]] ??
-          chineseDayNumber(relative[1].replace(/\s*天后$/, ''));
-        dueDate = new Date(today);
-        dueDate.setDate(dueDate.getDate() + days);
-        matchedText = relative[0];
-      }
     }
   }
 
@@ -1114,7 +1073,7 @@ export function JobAssistant() {
               placeholder="例如：9月14日完成在线笔试"
             />
             <span className="font-normal text-muted-foreground">
-              写入具体日期或“两天后”等相对日期，会自动加入临期提醒。
+              写入具体日期后会自动加入临期提醒，并显示“今天”“2 天后”等提示。
             </span>
           </label>
           <label className={fieldClass}>
@@ -1582,7 +1541,7 @@ function ApplicationsView({
             <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
               <p className="text-sm font-medium">未来 14 天没有临期事项</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                在“下一步”中填写“9月14日笔试”或“两天后面试”即可自动显示。
+                在“下一步”中填写“9月14日笔试”等带日期的事项即可自动显示。
               </p>
             </div>
           )}
